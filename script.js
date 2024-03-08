@@ -12,24 +12,30 @@ function setInput() {
   window.addEventListener("keydown", handleInput, { once: true });
 }
 
-function handleInput(e) {
+async function handleInput(e) {
   switch (e.key) {
     case "ArrowUp":
-      moveUp();
+      await moveUp();
       break;
     case "ArrowDown":
-      moveDown();
+      await moveDown();
       break;
     case "ArrowLeft":
-      moveLeft();
+      await moveLeft();
       break;
     case "ArrowRight":
-      moveRight();
+      await moveRight();
       break;
     default:
       setInput();
       return;
   }
+
+  grid.cells.forEach((cell) => cell.mergeTiles());
+
+  const newTile = new Tile(gameBoard);
+  grid.randomEmptyCell().tile = newTile;
+
   setInput();
 }
 
@@ -38,7 +44,7 @@ function moveUp() {
 }
 
 function moveDown() {
-  return slideTiles(grid.cellsByColumn.map(column => [...column].reverse()));
+  return slideTiles(grid.cellsByColumn.map((column) => [...column].reverse()));
 }
 
 function moveLeft() {
@@ -50,24 +56,29 @@ function moveRight() {
 }
 
 function slideTiles(cells) {
-  cells.forEach((group) => {
-    for (let i = 1; i < group.length; i++) {
-      const cell = group[i];
-      if (cell.tile == null) continue;
-      let lastValidCell;
-      for (let j = i - 1; j >= 0; j--) {
-        const moveToCell = group[j];
-        if (!moveToCell.canAccept(cell.tile)) break;
-        lastValidCell = moveToCell;
-      }
-      if (lastValidCell != null) {
-        if (lastValidCell.tile != null) {
-          lastValidCell.mergeTile = cell.tile;
-        } else {
-          lastValidCell.tile = cell.tile;
+  return Promise.all(
+    cells.flatMap((group) => {
+      const promises = [];
+      for (let i = 1; i < group.length; i++) {
+        const cell = group[i];
+        if (cell.tile == null) continue;
+        let lastValidCell;
+        for (let j = i - 1; j >= 0; j--) {
+          const moveToCell = group[j];
+          if (!moveToCell.canAccept(cell.tile)) break;
+          lastValidCell = moveToCell;
         }
-        cell.tile = null;
+        if (lastValidCell != null) {
+          promises.push(cell.tile.waitForTransition());
+          if (lastValidCell.tile != null) {
+            lastValidCell.mergeTile = cell.tile;
+          } else {
+            lastValidCell.tile = cell.tile;
+          }
+          cell.tile = null;
+        }
       }
-    }
-  });
+      return promises;
+    })
+  );
 }
